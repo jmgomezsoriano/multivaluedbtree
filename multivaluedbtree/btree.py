@@ -158,3 +158,14 @@ class MultivaluedBTree(OOBTree):
         if self._reverse:
             results.reverse()
         return results
+
+    def update(self, collection: dict) -> None:
+        """ Update this collection with other in dictionary format.
+        :param collection: The other collection.
+        """
+        for key, value in collection.items():
+            if isinstance(collection, MultivaluedBTree):
+                for v in value:
+                    self[key] = v
+            else:
+                self[key] = value
