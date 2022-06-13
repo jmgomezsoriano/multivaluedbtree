@@ -1,7 +1,15 @@
+import enum
+from enum import unique
 from typing import Tuple, List, Any
 
 from BTrees.OOBTree import OOBTree
 from multiprocessing import Lock
+
+
+@unique
+class QueueType(enum.Enum):
+    LIFO = 1
+    FIFO = 2
 
 
 class MultivaluedBTree(OOBTree):
@@ -20,56 +28,60 @@ class MultivaluedBTree(OOBTree):
        ```
     The list [1, 2] is printed.
     """
-    def __init__(self, decremental_order: bool = False, *args, **kwargs) -> None:
+    def __init__(self, reverse: bool = False, queue_type: QueueType = QueueType.LIFO, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.decremental_order = decremental_order
-        self.lock = Lock()
-        self.length = 0
+        self._queue_type = queue_type
+        self._reverse = reverse
+        self._lock = Lock()
+        self._length = 0
 
     def pop(self, key: Any, default: Any = None) -> Any:
-        self.lock.acquire()
+        self._lock.acquire()
         try:
             return self.__pop(key, default)
         finally:
-            self.lock.release()
+            self._lock.release()
 
     def popitem(self) -> Tuple[object, object]:
-        self.lock.acquire()
+        self._lock.acquire()
         try:
-            key = self.maxKey() if self.decremental_order else self.minKey()
+            key = self.maxKey() if self._reverse else self.minKey()
             value = self.__pop(key)
             return key, value
         finally:
-            self.lock.release()
+            self._lock.release()
 
     def __pop(self, key: Any, default: Any = None) -> Any:
         values = self[key] if default is None else self.get(key, [default])
         value = values.pop()
-        if not values:
+        if not values and key in self:
             del self[key]
-        self.length -= 1
+        self._length -= 1
         return value
 
     def __delete__(self, instance: object) -> None:
-        self.lock.acquire()
+        self._lock.acquire()
         try:
-            self.length -= len(self[instance])
+            self._length -= len(self[instance])
             del self[instance]
         finally:
-            self.lock.release()
+            self._lock.release()
 
     def __setitem__(self, key: object, value: object) -> None:
-        self.lock.acquire()
+        self._lock.acquire()
         try:
             values = self[key] if key in self else []
-            values.append(value)
+            if self._queue_type == QueueType.LIFO:
+                values.append(value)
+            else:
+                values.insert(0, value)
             super().__setitem__(key, values)
-            self.length += 1
+            self._length += 1
         finally:
-            self.lock.release()
+            self._lock.release()
 
     def __len__(self) -> int:
-        return self.length
+        return self._length
 
     def __repr__(self):
         return repr({key: values for key, values in self.items()})
@@ -85,6 +97,6 @@ class MultivaluedBTree(OOBTree):
         results = []
         for values in super().values(minimum, maximum):
             results.extend(values)
-        if self.decremental_order:
+        if self._reverse:
             results.reverse()
         return results
